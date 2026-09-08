@@ -1,0 +1,20 @@
+[configuration]
+
+entry_symbol = "rj_lib_init"
+compatibility_minimum = "4.7"
+reloadable = true
+
+[libraries]
+
+macos.debug = "res://bin/lib_ginnun.macos.debug.dylib"
+macos.release = "res://bin/lib_ginnun.macos.release.dylib"
+windows.debug.x86_32 = "res://bin/gdexample.windows.debug.x86_32.dll"
+windows.release.x86_32 = "res://bin/gdexample.windows.release.x86_32.dll"
+windows.debug.x86_64 = "res://bin/gdexample.windows.debug.x86_64.dll"
+windows.release.x86_64 = "res://bin/gdexample.windows.release.x86_64.dll"
+linux.debug.x86_64 = "res://bin/lib_ginnun.linux.debug.x86_64.so"
+linux.release.x86_64 = "res://bin/lib_ginnun.linux.release.x86_64.so"
+linux.debug.arm64 = "res://bin/lib_ginnun.linux.debug.arm64.so"
+linux.release.arm64 = "res://bin/lib_ginnun.linux.release.arm64.so"
+linux.debug.rv64 = "res://bin/lib_ginnun.linux.debug.rv64.so"
+linux.release.rv64 = "res://bin/lib_ginnun.linux.release.rv64.so"

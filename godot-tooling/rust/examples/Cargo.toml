@@ -1,0 +1,18 @@
+[package]
+name = "rj_ext"
+version = "1.0.0"
+edition = "2024" 
+
+[lib]
+# `name` here is deliberately different from the package name. This is
+# what xtask looks for on disk (libclient_extension.so / .dll / .dylib),
+# kept distinct from the generic package name "client".
+name = "rj_extension"
+# rlib: lets this crate be linked as a normal Rust dependency (tests, tools,
+#       anything that wants client's non-godot logic without going through Godot).
+# cdylib: the actual shared lib Godot dlopen()s at runtime.
+# Same source, both outputs, at once.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+godot = "0.5"
