@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# commit-msg git hook
+# Enforces the Conventional Commits format as described at:
+# https://gist.github.com/qoomon/5dfcdf8eec66a051ecd85625518cfd13
+#
+# Install: copy this file to .git/hooks/commit-msg and make it executable
+#   cp commit-msg .git/hooks/commit-msg
+#   chmod +x .git/hooks/commit-msg
+#
+# Git passes the path to the file containing the commit message as $1.
+# To bypass this hook simply use the `--no-verify` flag
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Read the commit message from the file git provides
+# ---------------------------------------------------------------------------
+COMMIT_MSG_FILE="${1}"
+COMMIT_MSG=$(cat "${COMMIT_MSG_FILE}")
+
+# The first line of the commit message is the header (subject line)
+COMMIT_MSG_HEADER=$(echo "${COMMIT_MSG}" | head -n 1)
+
+# ---------------------------------------------------------------------------
+# Allowed commit types from the qoomon Conventional Commits cheatsheet.
+# "ops" and "chore" are included because the cheatsheet defines them even
+# though they are not part of the minimal Angular-style set.
+# ---------------------------------------------------------------------------
+COMMIT_TYPES="feat|fix|refactor|perf|style|test|docs|build|ops|chore|revert"
+
+# ---------------------------------------------------------------------------
+# Regex patterns for each structural part of the header line.
+#
+# scope: any non-empty string that does not contain parentheses
+# breaking: optional "!" immediately before the colon
+# description: at least one non-whitespace character; must not be empty,
+#              must not start with a capital letter, must not end with "."
+#
+# The full header pattern composes these parts:
+#   <type>(<optional scope>)<optional !>: <description>
+# ---------------------------------------------------------------------------
+SCOPE_REGEX='[^()]+'
+BREAKING_REGEX='!'
+DESCRIPTION_REGEX='[^ \t].*'
+
+# Full conventional commit header regex.
+# Breakdown:
+#   ^                              start of line
+#   (TYPES)                        one of the allowed types (no digits, lowercase)
+#   (\(SCOPE\))?                   optional parenthesised scope
+#   (!)?                           optional breaking-change marker
+#   :[ ]                           colon followed by exactly one space
+#   DESCRIPTION                    non-empty description
+#   $                              end of line
+CONVENTIONAL_COMMIT_REGEX="^(${COMMIT_TYPES})(\(${SCOPE_REGEX}\))?(${BREAKING_REGEX})?:[[:space:]]${DESCRIPTION_REGEX}$"
+
+# Merge commit headers produced by git itself, e.g. "Merge branch 'main'"
+MERGE_COMMIT_REGEX="^Merge .+"
+
+# Revert commit headers produced by git revert, e.g. "Revert \"feat: something\""
+REVERT_COMMIT_REGEX="^Revert \".+\"$"
+
+# ---------------------------------------------------------------------------
+# Validation helpers
+# ---------------------------------------------------------------------------
+
+# check_description_casing checks that the description does not start with an
+# uppercase letter. Returns 1 if it does, 0 otherwise.
+check_description_casing() {
+    local header="${1}"
+    # Extract the description: everything after ": "
+    # Uses bash prefix stripping: strip up to and including the first ": "
+    local desc="${header#*: }"
+
+    # Check if the first character is an uppercase ASCII letter
+    if echo "${desc}" | grep -qP '^[A-Z]'; then
+        return 1
+    fi
+    return 0
+}
+
+# check_description_no_trailing_period checks that the description does not
+# end with a period. Returns 1 if it does, 0 otherwise.
+check_description_no_trailing_period() {
+    local header="${1}"
+    # Extract the description: strip up to and including the first ": "
+    local desc="${header#*: }"
+
+    if echo "${desc}" | grep -qP '\.$'; then
+        return 1
+    fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Skip certain auto-generated commit messages that git produces internally.
+# These do not need to follow the Conventional Commits format.
+# ---------------------------------------------------------------------------
+
+# Allow merge commits (default git merge message format)
+if echo "${COMMIT_MSG_HEADER}" | grep -qE "${MERGE_COMMIT_REGEX}"; then
+    exit 0
+fi
+
+# Allow revert commits (default git revert message format)
+if echo "${COMMIT_MSG_HEADER}" | grep -qE "${REVERT_COMMIT_REGEX}"; then
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Main format check against the Conventional Commits regex
+# ---------------------------------------------------------------------------
+if ! echo "${COMMIT_MSG_HEADER}" | grep -qP "${CONVENTIONAL_COMMIT_REGEX}"; then
+    echo "ERROR: commit message header does not follow Conventional Commits format." >&2
+    echo "" >&2
+    echo "Expected format:" >&2
+    echo "  <type>(<optional scope>)<optional !>: <description>" >&2
+    echo "" >&2
+    echo "Allowed types: feat, fix, refactor, perf, style, test, docs, build, ops, chore, revert" >&2
+    echo "" >&2
+    echo "Examples:" >&2
+    echo "  feat: add user authentication" >&2
+    echo "  fix(api): correct pagination offset" >&2
+    echo "  feat(auth)!: remove legacy login endpoint" >&2
+    echo "" >&2
+    echo "Received: ${COMMIT_MSG_HEADER}" >&2
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Additional description quality checks (applied only to conventional commits,
+# not to merge/revert since those passed the early-exit above).
+# ---------------------------------------------------------------------------
+
+# Description must not start with an uppercase letter.
+if ! check_description_casing "${COMMIT_MSG_HEADER}"; then
+    echo "ERROR: commit description must not start with an uppercase letter." >&2
+    echo "Received: ${COMMIT_MSG_HEADER}" >&2
+    exit 1
+fi
+
+# Description must not end with a period.
+if ! check_description_no_trailing_period "${COMMIT_MSG_HEADER}"; then
+    echo "ERROR: commit description must not end with a period." >&2
+    echo "Received: ${COMMIT_MSG_HEADER}" >&2
+    exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Structural check: if the message has more than one line, the second line
+# must be blank (acts as the separator between header and body/footer).
+# ---------------------------------------------------------------------------
+LINE_COUNT=$(echo "${COMMIT_MSG}" | wc -l)
+if [ "${LINE_COUNT}" -gt 1 ]; then
+    SECOND_LINE=$(echo "${COMMIT_MSG}" | sed -n '2p')
+    if [ -n "${SECOND_LINE}" ]; then
+        echo "ERROR: the second line of a commit message must be blank (separator between header and body)." >&2
+        echo "Received second line: '${SECOND_LINE}'" >&2
+        exit 1
+    fi
+fi
+
+# All checks passed
+exit 0
